@@ -9,6 +9,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@mtproto/core": "^6.3.0",
     "dotenv": "^16.3.1",
     "redis": "^4.6.7",
     "telegraf": "^4.12.2",

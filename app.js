@@ -227,6 +227,14 @@ const getChatMembers = async (chatId, chatType, userName) => {
 };
 
 bot.command('eth_waifu', async (ctx) => {
+
+    ctx.originReply = ctx.reply;
+    ctx.reply = (text, extra) => {
+        ctx.originReply(text, extra).catch((e) => {
+            console.log(e);
+        });
+    }
+
     console.log(ctx.chat)
     if (ctx.chat.type === 'private') {
         ctx.reply('请在群组中使用！', {
@@ -242,76 +250,81 @@ bot.command('eth_waifu', async (ctx) => {
 
     let chatMembers = await getChatMembers(chatId, chatType, userName);
 
+    let senderSha256;
+
     try {
-        const senderSha256 = chatMembers.find((user) => {
+        senderSha256 = chatMembers.find((user) => {
             return Number(user.id) === senderId;
         }).sha256;
     }
     catch (e) {
-        ctx.reply('发生Bug了！', {
-            reply_to_message_id: ctx.message.message_id
-        });
+        senderSha256 = crypto.createHash('sha256').update(`${senderId}.${getTodayDateString()}`).digest('hex');
     }
-    const senderSha256 = chatMembers.find((user) => {
-        return Number(user.id) === senderId;
-    }).sha256;
-    
 
     const waifuResult = await client.get('waifu:result:'  + getTodayDateString() + ':' + chatId + ':' + senderId);
-    if (waifuResult) {
-        const waifuResultJSON = JSON.parse(waifuResult);
-        if(waifuResultJSON.waifu.photo) {
-            try {
-                const photos = await bot.telegram.getUserProfilePhotos(waifuResultJSON.waifu.id);
-                if(photos.total_count > 0) {
-                    const photo = photos.photos[0][photos.photos[0].length - 1];
-                    ctx.replyWithPhoto(photo.file_id, {
-                        caption: `今日的老婆是：[${escapeMarkdown(waifuResultJSON.waifu.first_name)} ${waifuResultJSON.waifu.last_name ? escapeMarkdown(waifuResultJSON.waifu.last_name) : ''}](tg://user?id=${waifuResultJSON.waifu.id})\n\n*结果溯源*\n你的Hash:\`${'0x' + waifuResultJSON.senderSha256}\`\nETH最新区块:\`${waifuResultJSON.blockNumber}\`\n最新区块Hash：\`${waifuResultJSON.blockHash}\`\n抽取基数:\`${waifuResultJSON.memberLength}\`\n时间戳:\`${waifuResultJSON.timestamp}\``,
-                        parse_mode: 'MarkdownV2',
-                        reply_to_message_id: ctx.message.message_id
-                    });
-                    return;
-                }
-            }
-            catch(e) {
-
-            }
-        }
-        ctx.reply(`今日的老婆是：[${escapeMarkdown(waifuResultJSON.waifu.first_name)} ${waifuResultJSON.waifu.last_name ? escapeMarkdown(waifuResultJSON.waifu.last_name) : ''}](tg://user?id=${waifuResultJSON.waifu.id})\n\n*结果溯源*\n你的Hash:\`${'0x' + waifuResultJSON.senderSha256}\`\nETH最新区块:\`${waifuResultJSON.blockNumber}\`\n最新区块Hash：\`${waifuResultJSON.blockHash}\`\n抽取基数:\`${waifuResultJSON.memberLength}\`\n时间戳:\`${waifuResultJSON.timestamp}\``, {
-            parse_mode: 'MarkdownV2',
-            reply_to_message_id: ctx.message.message_id
-        });
-    } else {
-        const blockNumber = await web3.eth.getBlockNumber();
-        const timestamp = new Date().getTime();
-        const block = await web3.eth.getBlock(blockNumber);
-        const decimalBlockHash = BigInt(block.hash).toString(10);
-        const decimalSenderHash = BigInt('0x' + senderSha256).toString(10);
-        const waifuId = (Number(decimalBlockHash) + Number(decimalSenderHash)) % chatMembers.length;
-        const waifu = chatMembers[waifuId];
-        await client.set('waifu:result:'  + getTodayDateString() + ':' + chatId + ':' + senderId, JSON.stringify({waifu,blockNumber: blockNumber.toString(10),blockHash: block.hash,timestamp,senderSha256,memberLength: chatMembers.length}), 'EX', 86400);
-        if(waifu.photo) {
-            try {
-                const photos = await bot.telegram.getUserProfilePhotos(waifu.id);
-                if(photos.total_count > 0) {
-                    const photo = photos.photos[0][photos.photos[0].length - 1];
-                    ctx.replyWithPhoto(photo.file_id, {
-                        caption: `今日的老婆是：[${escapeMarkdown(waifu.first_name)} ${waifu.last_name ? escapeMarkdown(waifu.last_name) : ''}](tg://user?id=${waifu.id})\n\n*结果溯源*\n你的Hash:\`${'0x' + senderSha256}\`\nETH最新区块:\`${blockNumber.toString(10)}\`\n最新区块Hash：\`${block.hash}\`\n抽取基数:\`${chatMembers.length}\`\n时间戳:\`${timestamp}\``,
-                        parse_mode: 'MarkdownV2',
-                        reply_to_message_id: ctx.message.message_id
-                    });
-                    return;
+    try {
+        if (waifuResult) {
+            const waifuResultJSON = JSON.parse(waifuResult);
+            if(waifuResultJSON.waifu.photo) {
+                console.log(waifuResultJSON.waifu.id)
+                try {
+                    const photos = await bot.telegram.getUserProfilePhotos(Number(waifuResultJSON.waifu.id));
+                    if(photos.total_count > 0) {
+                        const photo = photos.photos[0][photos.photos[0].length - 1];
+                        ctx.replyWithPhoto(photo.file_id, {
+                            caption: `今日的老婆是：[${escapeMarkdown(waifuResultJSON.waifu.first_name)} ${waifuResultJSON.waifu.last_name ? escapeMarkdown(waifuResultJSON.waifu.last_name) : ''}](tg://user?id=${waifuResultJSON.waifu.id})\n\n*结果溯源*\n你的Hash:\`${'0x' + waifuResultJSON.senderSha256}\`\nETH最新区块:\`${waifuResultJSON.blockNumber}\`\n最新区块Hash：\`${waifuResultJSON.blockHash}\`\n抽取基数:\`${waifuResultJSON.memberLength}\`\n时间戳:\`${waifuResultJSON.timestamp}\``,
+                            parse_mode: 'MarkdownV2',
+                            reply_to_message_id: ctx.message.message_id
+                        });
+                        return;
                     }
-                    
                 }
-            catch(e) {
-
+                catch(e) {
+    
+                }
             }
+            ctx.reply(`今日的老婆是：[${escapeMarkdown(waifuResultJSON.waifu.first_name)} ${waifuResultJSON.waifu.last_name ? escapeMarkdown(waifuResultJSON.waifu.last_name) : ''}](tg://user?id=${waifuResultJSON.waifu.id})\n\n*结果溯源*\n你的Hash:\`${'0x' + waifuResultJSON.senderSha256}\`\nETH最新区块:\`${waifuResultJSON.blockNumber}\`\n最新区块Hash：\`${waifuResultJSON.blockHash}\`\n抽取基数:\`${waifuResultJSON.memberLength}\`\n时间戳:\`${waifuResultJSON.timestamp}\``, {
+                parse_mode: 'MarkdownV2',
+                reply_to_message_id: ctx.message.message_id
+            });
+        } else {
+            const blockNumber = await web3.eth.getBlockNumber();
+            const timestamp = new Date().getTime();
+            const block = await web3.eth.getBlock(blockNumber);
+            const decimalBlockHash = BigInt(block.hash).toString(10);
+            const decimalSenderHash = BigInt('0x' + senderSha256).toString(10);
+            const waifuId = (Number(decimalBlockHash) + Number(decimalSenderHash)) % chatMembers.length;
+            const waifu = chatMembers[waifuId];
+            await client.set('waifu:result:'  + getTodayDateString() + ':' + chatId + ':' + senderId, JSON.stringify({waifu,blockNumber: blockNumber.toString(10),blockHash: block.hash,timestamp,senderSha256,memberLength: chatMembers.length}), 'EX', 86400);
+            console.log(senderId, waifu);
+            if(waifu.photo) {
+                try {
+                    await bot.telegram.getChatMember(chatId, waifu.id);
+                    const photos = await bot.telegram.getUserProfilePhotos(Number(waifu.id));
+                    if(photos.total_count > 0) {
+                        const photo = photos.photos[0][photos.photos[0].length - 1];
+                        ctx.replyWithPhoto(photo.file_id, {
+                            caption: `今日的老婆是：[${escapeMarkdown(waifu.first_name)} ${waifu.last_name ? escapeMarkdown(waifu.last_name) : ''}](tg://user?id=${waifu.id})\n\n*结果溯源*\n你的Hash:\`${'0x' + senderSha256}\`\nETH最新区块:\`${blockNumber.toString(10)}\`\n最新区块Hash：\`${block.hash}\`\n抽取基数:\`${chatMembers.length}\`\n时间戳:\`${timestamp}\``,
+                            parse_mode: 'MarkdownV2',
+                            reply_to_message_id: ctx.message.message_id
+                        });
+                        return;
+                        }
+                        
+                    }
+                catch(e) {
+                    console.log(e);
+        
+                }
+            }
+            ctx.reply(`今日的老婆是：[${escapeMarkdown(waifu.first_name)} ${waifu.last_name ? escapeMarkdown(waifu.last_name) : ''}](tg://user?id=${waifu.id})\n\n*结果溯源*\n你的Hash:\`${'0x' + senderSha256}\`\nETH最新区块:\`${blockNumber.toString(10)}\`\n最新区块Hash：\`${block.hash}\`\n抽取基数:\`${chatMembers.length}\`\n时间戳:\`${timestamp}\``, {
+                parse_mode: 'MarkdownV2',
+                reply_to_message_id: ctx.message.message_id
+            });
         }
-        ctx.reply(`今日的老婆是：[${escapeMarkdown(waifu.first_name)} ${waifu.last_name ? escapeMarkdown(waifu.last_name) : ''}](tg://user?id=${waifu.id})\n\n*结果溯源*\n你的Hash:\`${'0x' + senderSha256}\`\nETH最新区块:\`${blockNumber.toString(10)}\`\n最新区块Hash：\`${block.hash}\`\n抽取基数:\`${chatMembers.length}\`\n时间戳:\`${timestamp}\``, {
-            parse_mode: 'MarkdownV2',
-            reply_to_message_id: ctx.message.message_id
-        });
+    }
+    catch (e) {
+        console.log(e);
     }
 });
 
